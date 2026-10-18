@@ -1,0 +1,52 @@
+name: Bearer SAST # Nombre del workflow visible en la pestaña Actions.
+'on': # Define los eventos que ejecutan el análisis.
+  push: # Ejecuta el workflow al subir cambios a la rama indicada.
+    branches: [main] # Limita este evento a la rama principal.
+  pull_request: # Analiza los cambios propuestos mediante un Pull Request.
+    branches: [main] # Ejecuta el análisis cuando el destino del PR es main.
+  workflow_dispatch: {} # Permite iniciar una ejecución manual desde Actions.
+permissions: # Concede únicamente los permisos necesarios al token del workflow.
+  contents: read # Permite descargar el código del repositorio.
+  security-events: write # Permite publicar resultados SARIF en Code scanning.
+jobs: # Agrupa los trabajos que ejecutará GitHub Actions.
+  sast: # Identificador del trabajo de análisis estático.
+    runs-on: ubuntu-latest # Usa un runner Linux hospedado por GitHub.
+    steps: # Declara los pasos en el orden en que se ejecutan.
+      - name: Descargar el repositorio # Identifica el paso de descarga del código.
+        uses: actions/checkout@v7.0.1 # Obtiene el código correspondiente al evento.
+        with: # Configura las opciones de checkout.
+          persist-credentials: false # Evita conservar credenciales de Git para pasos posteriores.
+      - name: Crear carpeta de reportes # Identifica la preparación de las salidas.
+        run: mkdir -p reportes # Crea la carpeta donde Bearer guardará los reportes.
+      - name: Analizar y generar SARIF # Identifica el análisis destinado a Code scanning.
+        uses: bearer/bearer-action@v2 # Ejecuta Bearer mediante su acción oficial.
+        with: # Configura las opciones del análisis SARIF.
+          version: "2.1.2" # Usa la misma versión de Bearer que en el entorno local.
+          path: "." # Analiza el repositorio completo desde su raíz.
+          format: sarif # Genera un reporte compatible con GitHub Code scanning.
+          output: reportes/bearer-ci.sarif # Guarda el reporte SARIF en una ruta conocida.
+          exit-code: "0" # Permite continuar aunque se detecten vulnerabilidades.
+      - name: Analizar y generar HTML # Identifica el análisis destinado al reporte descargable.
+        if: always() # Intenta generar el HTML aunque haya fallado un paso anterior.
+        uses: bearer/bearer-action@v2 # Ejecuta la acción oficial para producir el segundo formato.
+        with: # Configura las opciones del reporte HTML.
+          version: "2.1.2" # Mantiene la misma versión en los dos reportes.
+          path: "." # Conserva el alcance del análisis en todo el repositorio.
+          format: html # Produce un reporte que puede abrirse en un navegador.
+          output: reportes/bearer-ci.html # Guarda el HTML que se publicará como artefacto.
+          exit-code: "0" # Evita que los hallazgos interrumpan la publicación del reporte.
+      - name: Publicar SARIF en Code scanning # Identifica la carga de resultados de seguridad.
+        if: always() # Intenta publicar el SARIF incluso si otro paso falla.
+        uses: github/codeql-action/upload-sarif@v4 # Sube el SARIF mediante la acción de GitHub.
+        with: # Configura la carga del reporte SARIF.
+          sarif_file: reportes/bearer-ci.sarif # Indica el archivo SARIF que debe publicarse.
+          category: bearer # Usa una categoría estable para comparar análisis entre commits.
+          wait-for-processing: "true" # Espera a que GitHub termine de procesar el reporte.
+      - name: Guardar HTML como artefacto # Identifica la publicación del reporte descargable.
+        if: always() # Intenta guardar el HTML aunque falle otro paso del trabajo.
+        uses: actions/upload-artifact@v7.0.2 # Publica el archivo como artefacto de la ejecución.
+        with: # Configura el nombre, la ruta y la conservación del artefacto.
+          name: bearer-html # Define el nombre del artefacto que se descargará desde Actions.
+          path: reportes/bearer-ci.html # Selecciona únicamente el reporte HTML generado.
+          if-no-files-found: error # Marca un error si el HTML no llegó a generarse.
+          retention-days: 30 # Conserva el artefacto durante treinta días.
