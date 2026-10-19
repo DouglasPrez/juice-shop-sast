@@ -1,10 +1,21 @@
 import { type Request, type Response } from 'express'
 
-// Ejemplo intencional del laboratorio; esta función no se registra como ruta.
+// Ejemplo corregido del laboratorio; esta función no se registra como ruta.
 export function demoVulnerabilidad () {
   return (req: Request, res: Response) => {
-    const codigo = String(req.query.codigo ?? '')
-    const resultado = eval(codigo) // eslint-disable-line no-eval
+    const codigo = req.query.codigo
+    if (typeof codigo !== 'string') {
+      res.status(400).json({ error: 'El parametro codigo debe contener texto JSON valido.' })
+      return
+    }
+
+    let resultado: unknown
+    try {
+      resultado = JSON.parse(codigo)
+    } catch {
+      res.status(400).json({ error: 'El parametro codigo debe contener JSON valido.' })
+      return
+    }
     res.json({ resultado })
   }
 }
